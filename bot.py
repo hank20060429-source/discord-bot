@@ -27,7 +27,6 @@ async def background_check():
     global last_video, last_live, last_post, last_tweet
     await bot.wait_until_ready()
     while True:
-        # ==================== YouTube ====================
         try:
             feed = feedparser.parse(YT_RSS_URL)
             if feed.entries:
@@ -38,17 +37,36 @@ async def background_check():
                 title_lower = title.lower()
                 summary = latest.get('summary', '') or latest.get('description', '')
 
-                is_live = any(word in title_lower for word in ["直播", "live", "正在直播", "開播", "stream"])
+                # === 加強判斷 ===
+                is_live = any(word in title_lower for word in ["直播", "live", "正在直播", "開播", "stream", "正在實況"])
                 is_community = (
                     "community" in link.lower() or 
                     "post" in link.lower() or 
-                    len(summary) > 80 or 
-                    "❤️" in summary or 
-                    "poll" in title_lower
+                    "/community" in link or
+                    len(summary) > 150 or
+                    "❤️" in summary or
+                    "poll" in title_lower or
+                    "問答" in title_lower
                 )
 
-                # 一般影片
-                if not is_live and not is_community and entry_id != last_video:
+                # 正確優先順序：直播 > 社群貼文 > 一般影片
+                if is_live and entry_id != last_live:
+                    ch = bot.get_channel(LIVE_CHANNEL_ID)
+                    if ch:
+                        embed = discord.Embed(title=title, url=link, color=0x00FF00)
+                        await ch.send("🔴 **直播開始了！** @everyone", embed=embed)
+                        last_live = entry_id
+                        print(f"[直播] {title}")
+
+                elif is_community and entry_id != last_post:
+                    ch = bot.get_channel(POST_CHANNEL_ID)
+                    if ch:
+                        embed = discord.Embed(title=title[:256], url=link, color=0x7289DA)
+                        await ch.send("📢 **社群新貼文！** @everyone", embed=embed)
+                        last_post = entry_id
+                        print(f"[社群貼文] {title}")
+
+                elif entry_id != last_video:   # 一般影片
                     ch = bot.get_channel(VIDEO_CHANNEL_ID)
                     if ch:
                         embed = discord.Embed(title=title, url=link, color=0xFF0000)
@@ -58,28 +76,8 @@ async def background_check():
                         last_video = entry_id
                         print(f"[影片] {title}")
 
-                # 直播
-                elif is_live and entry_id != last_live:
-                    ch = bot.get_channel(LIVE_CHANNEL_ID)
-                    if ch:
-                        embed = discord.Embed(title=title, url=link, color=0x00FF00)
-                        if hasattr(latest, 'media_thumbnail') and latest.media_thumbnail:
-                            embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
-                        await ch.send("🔴 **直播開始了！** @everyone", embed=embed)
-                        last_live = entry_id
-                        print(f"[直播] {title}")
-
-                # 社群貼文
-                elif is_community and entry_id != last_post:
-                    ch = bot.get_channel(POST_CHANNEL_ID)
-                    if ch:
-                        embed = discord.Embed(title=title[:256], url=link, color=0x7289DA, description=summary[:400] + "..." if len(summary) > 400 else summary)
-                        await ch.send("📢 **YouTube 社群新貼文！** @everyone", embed=embed)
-                        last_post = entry_id
-                        print(f"[社群貼文] {title}")
         except Exception as e:
             print(f"YouTube 檢查錯誤: {e}")
-
         # ==================== X 推文 ====================
         try:
             x_feed = feedparser.parse(X_RSS_URL)
