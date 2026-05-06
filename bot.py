@@ -112,22 +112,11 @@ async def background_check():
         except:
             pass
         await asyncio.sleep(60)
-✅ 好的，我給你最乾淨的解決方案。
-1. 先修正 requirements.txt
-請把你的 requirements.txt 完整替換成下面內容：
-txtdiscord.py
-feedparser
-pixivpy
-儲存後一定要 Redeploy！
-
-2. 使用下面極簡且穩定的 Pixiv 斜線指令（直接替換）
 Python# ====================== Pixiv 多標籤斜線指令 ======================
 from pixivpy import AppPixivAPI
 import random
 import os
-
 pixiv_api = None
-
 @bot.event
 async def on_ready():
     global pixiv_api
@@ -140,26 +129,21 @@ async def on_ready():
             print("✅ Pixiv API 初始化成功")
     except Exception as e:
         print(f"Pixiv 初始化失敗: {e}")
-
     try:
         await bot.tree.sync()
         print("✅ /pixiv 指令已同步")
     except:
         pass
-
-
 @bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽圖（支援多標籤 #tag）")
 @app_commands.describe(tags="標籤，可輸入多個 #tag")
 async def pixiv(interaction: discord.Interaction, tags: str = None):
     
     # 頻道限制（改成你允許的頻道ID）
-    ALLOWED_CHANNELS = [1501143513843241041]   
+    ALLOWED_CHANNELS = [1501131000368074873]   
     if interaction.channel_id not in ALLOWED_CHANNELS:
         await interaction.response.send_message("❌ 此指令只能在指定頻道使用！", ephemeral=True)
         return
-
     await interaction.response.defer()
-
     try:
         if tags:
             # 支援多個 #tag
@@ -168,13 +152,10 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
             result = pixiv_api.search_illust(keyword, search_target='partial_match_for_tags')
         else:
             result = pixiv_api.illust_ranking(mode='day')
-
         candidates = [i for i in result.get('illusts', []) if i.get('total_bookmarks', 0) >= 100]
-
         if not candidates:
-            await interaction.followup.send("❌ 找不到按讚100以上的圖片，請換個標籤！")
+            await interaction.followup.send("❌找不到符合的圖片，請換個標籤！")
             return
-
         illust = random.choice(candidates)
         image_url = illust['image_urls'].get('large') or illust['image_urls']['medium']
         page_url = f"https://www.pixiv.net/artworks/{illust['id']}"
