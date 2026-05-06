@@ -20,28 +20,6 @@ LIVE_CHANNEL_ID  = int(os.environ.get('LIVE_CHANNEL_ID',  '1501138912389894234')
 POST_CHANNEL_ID  = int(os.environ.get('POST_CHANNEL_ID',  '1501138866868981901'))
 X_CHANNEL_ID     = int(os.environ.get('X_CHANNEL_ID',     '1501143513843241041'))
 
-# ====================== YouTube 關鍵字分類 ======================
-CLASSIFICATION_RULES = {
-    "影片上傳": {
-        "keywords": ["【Hololive中文翻譯】", "【MD精華剪輯】", "【VTuber中文翻譯】", "【VTuber直播精華】"],
-        "channel_id": VIDEO_CHANNEL_ID,
-        "emoji": "🎥",
-        "prefix": "@everyone 新影片上傳了！"
-    },
-    "直播": {
-        "keywords": ["直播", "live", "正在直播", "開播", "實況", "stream"],
-        "channel_id": LIVE_CHANNEL_ID,
-        "emoji": "🔴",
-        "prefix": "@everyone 直播開始了！"
-    },
-    "Shorts": {
-        "keywords": ["shorts", "短片", "short"],
-        "channel_id": VIDEO_CHANNEL_ID,
-        "emoji": "📱",
-        "prefix": "@everyone 新 Shorts！"
-    }
-}
-
 # ====================== Pixiv 設定 ======================
 pixiv_api = None
 
@@ -70,82 +48,68 @@ async def on_ready():
     except:
         pass
 
-# ====================== 背景任務 ======================
+# ====================== YouTube & X 背景任務 ======================
 async def background_check():
-    global last_video, last_live, last_post, last_tweet
     await bot.wait_until_ready()
     while True:
-        # YouTube 通知
+        # YouTube 通知（簡化版）
         try:
             feed = feedparser.parse(YT_RSS_URL)
             if feed.entries:
                 latest = feed.entries[0]
-                entry_id = latest.id
-                title = latest.title
-                link = latest.link
-                title_lower = title.lower()
-
-                target = {"channel_id": VIDEO_CHANNEL_ID, "emoji": "🎥", "prefix": "新影片上傳了！"}
-                for rule_name, rule in CLASSIFICATION_RULES.items():
-                    if any(kw.lower() in title_lower for kw in rule["keywords"]):
-                        target = rule
-                        break
-
-                ch = bot.get_channel(target["channel_id"])
+                ch = bot.get_channel(VIDEO_CHANNEL_ID)
                 if ch:
-                    embed = discord.Embed(title=title, url=link, color=0xFF0000)
-                    await ch.send(f"{target['emoji']} **{target['prefix']}**", embed=embed)
+                    embed = discord.Embed(title=latest.title, url=latest.link, color=0xFF0000)
+                    await ch.send("🎥 **新影片上傳！** @everyone", embed=embed)
         except:
             pass
 
         # X 推文
         try:
             x_feed = feedparser.parse(X_RSS_URL)
-            if x_feed.entries and x_feed.entries[0].id != last_tweet:
+            if x_feed.entries:
                 tweet = x_feed.entries[0]
                 ch = bot.get_channel(X_CHANNEL_ID)
                 if ch:
                     embed = discord.Embed(title="📝 新推文", description=tweet.title[:400], url=tweet.link, color=0x1DA1F2)
                     await ch.send("🐦 **@everyone X新推文！**", embed=embed)
-                    last_tweet = tweet.id
         except:
             pass
 
         await asyncio.sleep(60)
 
-# ====================== /pixiv 指令（含等待提示） ======================
-@bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽圖（支援多標籤）")
-@app_commands.describe(tags="標籤，可輸入多個 #tag")
+# ====================== /pixiv 指令 ======================
+@bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽圖")
+@app_commands.describe(tags="可輸入多個 #tag")
 async def pixiv(interaction: discord.Interaction, tags: str = None):
-    ALLOWED_CHANNELS = [1501131000368074873]   # ← 改成你想允許的頻道ID
+    ALLOWED_CHANNELS = [1501131000368074873]   # ← 改成你的頻道ID
 
     if interaction.channel_id not in ALLOWED_CHANNELS:
         await interaction.response.send_message("❌ 此指令只能在指定頻道使用！", ephemeral=True)
         return
 
-    await interaction.response.send_message("🔍 **正在從 Pixiv 找尋圖片...** 請稍等～")
+    await interaction.response.send_message("🔍 **正在從 Pixiv 找圖片...** 請稍等～")
 
     try:
         if tags:
             tag_list = [t.strip('# ') for t in tags.split() if t.startswith('#')]
             keyword = " ".join(tag_list)
-            result = pixiv_api.search_illust(keyword, search_target='partial_match_for_tags')
+            result = pixiv_api.search_illust(keyword)
         else:
             result = pixiv_api.illust_ranking(mode='day')
 
         candidates = [i for i in result.get('illusts', []) if i.get('total_bookmarks', 0) >= 100]
 
         if not candidates:
-            await interaction.edit_original_response(content="❌ 找不到符合的圖片，請換個標籤！")
+            await interaction.edit_original_response(content="❌ 找不到符合的圖片")
             return
 
         illust = random.choice(candidates)
         image_url = illust['image_urls'].get('large') or illust['image_urls']['medium']
-        page_url = f"https://www.pixiv.net/artworks/{illust['id']}"
 
         embed = discord.Embed(
             title=illust['title'],
-            url=page_url,
+            url=f"https://www.pixiv.net/artworks/{illust['id']}",
             description=f"❤️ 按讚 {illust.get('total_bookmarks', 0)}　👤 {illust['user']['name']}",
             color=0xFF69B4
         )
@@ -155,7 +119,6 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
 
     except Exception as e:
         await interaction.edit_original_response(content="❌ Pixiv 連線失敗，請稍後再試")
-        print(f"Pixiv 錯誤: {e}")
 
 # ====================== 基本指令 ======================
 @bot.command()
