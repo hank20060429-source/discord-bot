@@ -112,37 +112,22 @@ async def background_check():
         except:
             pass
         await asyncio.sleep(60)
-# ====================== Pixiv 斜線指令 ======================
+✅ 好的，我給你最乾淨的解決方案。
+1. 先修正 requirements.txt
+請把你的 requirements.txt 完整替換成下面內容：
+txtdiscord.py
+feedparser
+pixivpy
+儲存後一定要 Redeploy！
+
+2. 使用下面極簡且穩定的 Pixiv 斜線指令（直接替換）
+Python# ====================== Pixiv 多標籤斜線指令 ======================
 from pixivpy import AppPixivAPI
 import random
 import os
-import discord
-from discord import app_commands
-# 初始化 Pixiv API
+
 pixiv_api = None
-@bot.event
-async def on_ready():
-    global pixiv_api
-    print(f'✅ {bot.user} 已上線')
-    try:
-        pixiv_api = AppPixivAPI()
-        sessid = os.environ.get("PIXIV_PHPSESSID")
-        if sessid:
-            pixiv_api.requests.headers.update({'Cookie': f'PHPSESSID={sessid}'})
-            print("✅ Pixiv API 初始化成功")
-    except Exception as e:
-        print(f"⚠️ Pixiv 初始化失敗: {e}")
-    # 同步斜線指令
-    try:
-        await bot.tree.sync()
-        print("✅ 斜線指令已同步")
-    except Exception as e:
-        print(f"斜線指令同步失敗: {e}")
-# ====================== Pixiv 多標籤斜線指令 ======================
-from pixivpy import AppPixivAPI
-import random
-import os
-pixiv_api = None
+
 @bot.event
 async def on_ready():
     global pixiv_api
@@ -155,16 +140,20 @@ async def on_ready():
             print("✅ Pixiv API 初始化成功")
     except Exception as e:
         print(f"Pixiv 初始化失敗: {e}")
+
     try:
         await bot.tree.sync()
+        print("✅ /pixiv 指令已同步")
     except:
         pass
-@bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽一張按讚100以上的圖片（支援多標籤）")
-@app_commands.describe(tags="搜尋標籤，可輸入多個 #tag（例如 #原神 #女の子）")
+
+
+@bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽圖（支援多標籤 #tag）")
+@app_commands.describe(tags="標籤，可輸入多個 #tag")
 async def pixiv(interaction: discord.Interaction, tags: str = None):
     
-    # 頻道限制
-    ALLOWED_CHANNELS = [1501131000368074873]   # ← 改成你允許的頻道ID
+    # 頻道限制（改成你允許的頻道ID）
+    ALLOWED_CHANNELS = [1501143513843241041]   
     if interaction.channel_id not in ALLOWED_CHANNELS:
         await interaction.response.send_message("❌ 此指令只能在指定頻道使用！", ephemeral=True)
         return
@@ -172,23 +161,18 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
     await interaction.response.defer()
 
     try:
-        # 解析多個 #tag
-        search_tags = []
         if tags:
-            search_tags = [t.strip('# ') for t in tags.split() if t.startswith('#')]
-
-        if search_tags:
-            # 多標籤搜尋（Pixiv 會自動 AND 處理）
-            keyword = " ".join(search_tags)
+            # 支援多個 #tag
+            tag_list = [t.strip('# ') for t in tags.split() if t.startswith('#')]
+            keyword = " ".join(tag_list)
             result = pixiv_api.search_illust(keyword, search_target='partial_match_for_tags')
         else:
-            result = pixiv_api.illust_ranking(mode='day')  # 無標籤 = 每日排行
+            result = pixiv_api.illust_ranking(mode='day')
 
-        # 篩選按讚 ≥ 100
-        candidates = [illust for illust in result.get('illusts', []) if illust.get('total_bookmarks', 0) >= 100]
+        candidates = [i for i in result.get('illusts', []) if i.get('total_bookmarks', 0) >= 100]
 
         if not candidates:
-            await interaction.followup.send("❌ 找不到符合條件的圖片，請換個標籤試試！")
+            await interaction.followup.send("❌ 找不到按讚100以上的圖片，請換個標籤！")
             return
 
         illust = random.choice(candidates)
@@ -198,18 +182,14 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
         embed = discord.Embed(
             title=illust['title'],
             url=page_url,
-            description=f"❤️ 按讚數：**{illust.get('total_bookmarks', 0)}**　👤 {illust['user']['name']}",
+            description=f"❤️ 按讚 {illust.get('total_bookmarks', 0)}　👤 {illust['user']['name']}",
             color=0xFF69B4
         )
         embed.set_image(url=image_url)
-        
-        tag_text = " ".join([f"#{t}" for t in search_tags]) if search_tags else "隨機熱門"
-        embed.set_footer(text=f"搜尋標籤：{tag_text}")
-
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send("❌ Pixiv 連線失敗，請稍後再試！")
+        await interaction.followup.send("❌ Pixiv 連線失敗，請稍後再試")
         print(f"Pixiv 錯誤: {e}")
 @bot.command()
 async def hello(ctx):
