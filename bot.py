@@ -11,7 +11,26 @@ from pixivpy import AppPixivAPI
 TOKEN = os.environ.get('DISCORD_TOKEN')
 if not TOKEN:
     raise RuntimeError("缺少 DISCORD_TOKEN 環境變數")
+import discord
+import os
 
+intents = discord.Intents.default()
+intents.message_content = True
+bot = discord.Client(intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f'✅ {bot.user} 已成功上線！（極簡測試版）')
+    print('目前只有 !hello 指令可用')
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    if message.content.lower() == '!hello':
+        await message.channel.send(f'哈囉！{message.author.mention} 👋')
+
+bot.run(os.environ.get('DISCORD_TOKEN'))
 YT_RSS_URL = os.environ.get('YT_RSS_URL', 'https://rss.app/feeds/2VOFkD9cN2lUEILD.xml')
 X_RSS_URL = os.environ.get('X_RSS_URL', 'https://rss.app/feeds/LVhaUIOmUJPrRdhI.xml')
 
