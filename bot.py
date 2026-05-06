@@ -10,27 +10,8 @@ from pixivpy import AppPixivAPI
 # ====================== 環境變數 ======================
 TOKEN = os.environ.get('DISCORD_TOKEN')
 if not TOKEN:
-    raise RuntimeError("缺少 DISCORD_TOKEN 環境變數")
-import discord
-import os
+    raise RuntimeError("❌ 缺少 DISCORD_TOKEN 環境變數！")
 
-intents = discord.Intents.default()
-intents.message_content = True
-bot = discord.Client(intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f'✅ {bot.user} 已成功上線！（極簡測試版）')
-    print('目前只有 !hello 指令可用')
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    if message.content.lower() == '!hello':
-        await message.channel.send(f'哈囉！{message.author.mention} 👋')
-
-bot.run(os.environ.get('DISCORD_TOKEN'))
 YT_RSS_URL = os.environ.get('YT_RSS_URL', 'https://rss.app/feeds/2VOFkD9cN2lUEILD.xml')
 X_RSS_URL = os.environ.get('X_RSS_URL', 'https://rss.app/feeds/LVhaUIOmUJPrRdhI.xml')
 
@@ -82,6 +63,8 @@ async def on_ready():
         if sessid:
             pixiv_api.requests.headers.update({'Cookie': f'PHPSESSID={sessid}'})
             print("✅ Pixiv API 初始化成功")
+        else:
+            print("⚠️ 未設定 PIXIV_PHPSESSID")
     except Exception as e:
         print(f"⚠️ Pixiv 初始化失敗: {e}")
 
@@ -92,13 +75,13 @@ async def on_ready():
     except Exception as e:
         print(f"斜線指令同步失敗: {e}")
 
-# ====================== YouTube 背景檢查 ======================
+# ====================== YouTube + X 背景檢查 ======================
 async def background_check():
     global last_video, last_live, last_post, last_tweet
     await bot.wait_until_ready()
     
     while True:
-        # YouTube 部分（你的原本程式碼）
+        # YouTube 檢查
         try:
             feed = feedparser.parse(YT_RSS_URL)
             if feed.entries:
@@ -132,7 +115,7 @@ async def background_check():
         except Exception as e:
             print(f"YouTube 錯誤: {e}")
 
-        # X 推文部分
+        # X 推文檢查
         try:
             x_feed = feedparser.parse(X_RSS_URL)
             if x_feed.entries and x_feed.entries[0].id != last_tweet:
@@ -148,17 +131,19 @@ async def background_check():
 
         await asyncio.sleep(60)
 
-# ====================== /pixiv 指令 ======================
+# ====================== /pixiv 多標籤指令（含等待提示） ======================
 @bot.tree.command(name="pixiv", description="從 Pixiv 隨機抽圖（支援多標籤）")
 @app_commands.describe(tags="標籤，可輸入多個 #tag")
 async def pixiv(interaction: discord.Interaction, tags: str = None):
-    ALLOWED_CHANNELS = [1501131000368074873]   # ← 修改成你想要的頻道ID
+    
+    ALLOWED_CHANNELS = [1501131000368074873]   # ← 改成你想允許的頻道ID
 
     if interaction.channel_id not in ALLOWED_CHANNELS:
         await interaction.response.send_message("❌ 此指令只能在指定頻道使用！", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    # 先回應等待訊息
+    await interaction.response.send_message("🔍 **正在從 Pixiv 找尋圖片...** 請稍等一下～", ephemeral=False)
 
     try:
         if tags:
@@ -171,7 +156,7 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
         candidates = [i for i in result.get('illusts', []) if i.get('total_bookmarks', 0) >= 100]
 
         if not candidates:
-            await interaction.followup.send("❌ 找不到按讚100以上的圖片，請換個標籤！")
+            await interaction.edit_original_response(content="❌ 找不到按讚100以上的圖片，請換個標籤試試！")
             return
 
         illust = random.choice(candidates)
@@ -185,13 +170,15 @@ async def pixiv(interaction: discord.Interaction, tags: str = None):
             color=0xFF69B4
         )
         embed.set_image(url=image_url)
-        await interaction.followup.send(embed=embed)
+
+        # 替換原本的等待訊息為最終結果
+        await interaction.edit_original_response(content=None, embed=embed)
 
     except Exception as e:
-        await interaction.followup.send("❌ Pixiv 連線失敗，請稍後再試")
+        await interaction.edit_original_response(content="❌ Pixiv 連線失敗，請稍後再試")
         print(f"Pixiv 錯誤: {e}")
 
-# ====================== 基本測試指令 ======================
+# ====================== 基本指令 ======================
 @bot.command()
 async def hello(ctx):
     await ctx.send(f'哈囉！{ctx.author.mention} 👋')
