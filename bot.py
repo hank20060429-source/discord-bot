@@ -3,6 +3,7 @@ from discord.ext import commands
 import feedparser
 import asyncio
 import os
+
 # ====================== 環境變數 ======================
 TOKEN = os.environ.get('DISCORD_TOKEN')
 if not TOKEN:
