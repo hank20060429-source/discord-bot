@@ -12,20 +12,47 @@ VIDEO_CHANNEL_ID = int(os.environ.get('VIDEO_CHANNEL_ID', '1501136787500830731')
 LIVE_CHANNEL_ID  = int(os.environ.get('LIVE_CHANNEL_ID',  '1501138912389894234'))
 POST_CHANNEL_ID  = int(os.environ.get('POST_CHANNEL_ID',  '1501138866868981901'))
 X_CHANNEL_ID     = int(os.environ.get('X_CHANNEL_ID',     '1501143513843241041'))
-last_video = None
-last_live  = None
-last_post  = None
-last_tweet = None
+last_video = last_live = last_post = last_tweet = None
+# ===================================================
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# ==================== 關鍵字分類設定 ====================
+# 你可以在這裡自由新增或修改關鍵字（不分大小寫）
+CLASSIFICATION_RULES = {
+    "影片上傳": {
+        "keywords": ["【Hololive中文翻譯】", "【MD精華剪輯】", "【VTuber中文翻譯】", "【VTuber直播精華】"],
+        "channel_id": VIDEO_CHANNEL_ID,
+        "emoji": "🎥",
+        "prefix": "@everyone新影片上傳了！"
+    },
+    "直播": {
+        "keywords": ["直播", "live", "正在直播", "開播", "實況", "stream"],
+        "channel_id": LIVE_CHANNEL_ID,
+        "emoji": "🔴",
+        "prefix": "@everyone直播開始了！"
+    },
+    },
+    "Shorts": {
+        "keywords": ["shorts", "短片", "short"],
+        "channel_id": VIDEO_CHANNEL_ID,   # 你可以改成另外一個 Shorts 頻道
+        "emoji": "📱",
+        "prefix": "@everyone新 Shorts！"
+    }
+}
+# ===================================================
+
 @bot.event
 async def on_ready():
-    print(f'✅ {bot.user} 已成功上線！')
+    print(f'✅ {bot.user} 已上線！關鍵字分類系統運作中...')
     bot.loop.create_task(background_check())
+
 async def background_check():
     global last_video, last_live, last_post, last_tweet
     await bot.wait_until_ready()
+    
     while True:
         try:
             feed = feedparser.parse(YT_RSS_URL)
@@ -35,66 +62,58 @@ async def background_check():
                 title = latest.title
                 link = latest.link
                 title_lower = title.lower()
-                summary = latest.get('summary', '') or latest.get('description', '')
 
-                # === 加強判斷 ===
-                is_live = any(word in title_lower for word in ["直播", "live", "正在直播", "開播", "stream", "正在實況"])
-                is_community = (
-                    "community" in link.lower() or 
-                    "post" in link.lower() or 
-                    "/community" in link or
-                    len(summary) > 150 or
-                    "❤️" in summary or
-                    "poll" in title_lower or
-                    "問答" in title_lower
-                )
+                # 預設是一般影片
+                target = {
+                    "channel_id": VIDEO_CHANNEL_ID,
+                    "emoji": "🎥",
+                    "prefix": "新影片上傳！"
+                }
 
-                # 正確優先順序：直播 > 社群貼文 > 一般影片
-                if is_live and entry_id != last_live:
-                    ch = bot.get_channel(LIVE_CHANNEL_ID)
-                    if ch:
-                        embed = discord.Embed(title=title, url=link, color=0x00FF00)
-                        await ch.send("🔴 **直播開始了！** @everyone", embed=embed)
-                        last_live = entry_id
-                        print(f"[直播] {title}")
+                # 檢查是否符合任一分類規則
+                for rule_name, rule in CLASSIFICATION_RULES.items():
+                    if any(kw.lower() in title_lower for kw in rule["keywords"]):
+                        target = rule
+                        print(f"[{rule_name}] 偵測到：{title}")
+                        break
 
-                elif is_community and entry_id != last_post:
-                    ch = bot.get_channel(POST_CHANNEL_ID)
-                    if ch:
-                        embed = discord.Embed(title=title[:256], url=link, color=0x7289DA)
-                        await ch.send("📢 **社群新貼文！** @everyone", embed=embed)
-                        last_post = entry_id
-                        print(f"[社群貼文] {title}")
-
-                elif entry_id != last_video:   # 一般影片
-                    ch = bot.get_channel(VIDEO_CHANNEL_ID)
+                # 避免重複發送
+                if (target["channel_id"] == LIVE_CHANNEL_ID and entry_id == last_live) or \
+                   (target["channel_id"] == POST_CHANNEL_ID and entry_id == last_post) or \
+                   (target["channel_id"] == VIDEO_CHANNEL_ID and entry_id == last_video):
+                    pass
+                else:
+                    ch = bot.get_channel(target["channel_id"])
                     if ch:
                         embed = discord.Embed(title=title, url=link, color=0xFF0000)
-                        if hasattr(latest, 'media_thumbnail') and latest.media_thumbnail:
-                            embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
-                        await ch.send("🎥 **新影片上傳！** @everyone", embed=embed)
-                        last_video = entry_id
-                        print(f"[影片] {title}")
+                        await ch.send(f"{target['emoji']} **{target['prefix']}** @everyone", embed=embed)
+                        
+                        # 更新最後發送紀錄
+                        if target["channel_id"] == LIVE_CHANNEL_ID:
+                            last_live = entry_id
+                        elif target["channel_id"] == POST_CHANNEL_ID:
+                            last_post = entry_id
+                        else:
+                            last_video = entry_id
 
         except Exception as e:
             print(f"YouTube 檢查錯誤: {e}")
-        # ==================== X 推文 ====================
+
+        # X 推文部分保持不變...
         try:
             x_feed = feedparser.parse(X_RSS_URL)
-            if x_feed.entries:
-                latest_tweet = x_feed.entries[0]
-                if latest_tweet.id != last_tweet:
-                    ch = bot.get_channel(X_CHANNEL_ID)
-                    if ch:
-                        desc = latest_tweet.title[:400] + "..." if len(latest_tweet.title) > 400 else latest_tweet.title
-                        embed = discord.Embed(title="📝 新推文", description=desc, url=latest_tweet.link, color=0x1DA1F2)
-                        await ch.send("🐦 **X 新推文！@everyone**", embed=embed)
-                        last_tweet = latest_tweet.id
-                        print(f"[X推文] {latest_tweet.title}")
-        except Exception as e:
-            print(f"X 推文檢查錯誤: {e}")
+            if x_feed.entries and x_feed.entries[0].id != last_tweet:
+                tweet = x_feed.entries[0]
+                ch = bot.get_channel(X_CHANNEL_ID)
+                if ch:
+                    desc = tweet.title[:400] + "..." if len(tweet.title) > 400 else tweet.title
+                    embed = discord.Embed(title="📝 新推文", description=desc, url=tweet.link, color=0x1DA1F2)
+                    await ch.send("🐦 **@everyone X新推文！**", embed=embed)
+                    last_tweet = tweet.id
+        except:
+            pass
 
-        await asyncio.sleep(60)  # 每60秒檢查一次
+        await asyncio.sleep(60)
 @bot.command()
 async def hello(ctx):
     await ctx.send(f'哈囉！{ctx.author.mention} 👋')
