@@ -112,6 +112,68 @@ async def background_check():
         except:
             pass
         await asyncio.sleep(60)
+# ====================== Pixiv 指令（限制頻道） ======================
+from pixivpy import AppPixivAPI
+import random
+
+# ====================== 設定允許使用的頻道 ======================
+ALLOWED_CHANNELS = [
+    1501131000368074873,   # ← 把你要允許的頻道 ID 貼在這裡（可加多個）
+    你的其他頻道ID,       # 例如：1234567890123456789,
+    # 1501136787500830731, # 如果要加影片頻道也可以
+]
+
+pixiv_api = AppPixivAPI()
+pixiv_api.requests.headers.update({
+    'Cookie': f'PHPSESSID={os.environ.get("PIXIV_PHPSESSID")}'
+})
+
+@bot.command()
+async def pixiv(ctx, *, tag: str = None):
+    """ !pixiv 或 !pixiv #標籤 """
+    
+    # === 頻道限制檢查 ===
+    if ctx.channel.id not in ALLOWED_CHANNELS:
+        await ctx.send("❌ 此指令只能在指定頻道使用！")
+        return
+    
+    await ctx.channel.trigger_typing()
+
+    try:
+        if tag and tag.startswith("#"):
+            search_tag = tag[1:].strip()
+            result = pixiv_api.search_illust(search_tag, search_target='partial_match_for_tags')
+        else:
+            result = pixiv_api.illust_ranking(mode='day')
+
+        if not result or not result.get('illusts'):
+            await ctx.send("❌ 找不到符合的圖片，請換個標籤試試～")
+            return
+
+        candidates = [illust for illust in result['illusts'] if illust.get('total_bookmarks', 0) >= 100]
+
+        if not candidates:
+            await ctx.send("❌找不到符合的圖片，請換個標籤試試～")
+            return
+
+        illust = random.choice(candidates)
+        image_url = illust['image_urls'].get('large') or illust['image_urls']['medium']
+        page_url = f"https://www.pixiv.net/artworks/{illust['id']}"
+
+        embed = discord.Embed(
+            title=illust['title'],
+            url=page_url,
+            description=f"❤️ 按讚數：**{illust.get('total_bookmarks', 0)}**　👤 {illust['user']['name']}",
+            color=0xFF69B4
+        )
+        embed.set_image(url=image_url)
+        embed.set_footer(text=f"標籤：{', '.join(t['name'] for t in illust.get('tags', [])[:6])}")
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        print(f"Pixiv 錯誤: {e}")
+        await ctx.send("❌ Pixiv 連線失敗，請稍後再試！")
 @bot.command()
 async def hello(ctx):
     await ctx.send(f'哈囉！{ctx.author.mention} 👋')
