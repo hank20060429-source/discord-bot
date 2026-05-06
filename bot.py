@@ -88,7 +88,7 @@ async def background_check():
                     if ch:
                         desc = latest_tweet.title[:400] + "..." if len(latest_tweet.title) > 400 else latest_tweet.title
                         embed = discord.Embed(title="📝 新推文", description=desc, url=latest_tweet.link, color=0x1DA1F2)
-                        await ch.send("🐦 **X 新推文！**", embed=embed)
+                        await ch.send("🐦 **X 新推文！@everyone**", embed=embed)
                         last_tweet = latest_tweet.id
                         print(f"[X推文] {latest_tweet.title}")
         except Exception as e:
