@@ -34,7 +34,6 @@ CLASSIFICATION_RULES = {
         "emoji": "🔴",
         "prefix": "@everyone直播開始了！"
     },
-    },
     "Shorts": {
         "keywords": ["shorts", "短片", "short"],
         "channel_id": VIDEO_CHANNEL_ID,   # 你可以改成另外一個 Shorts 頻道
@@ -112,7 +111,6 @@ async def background_check():
                     last_tweet = tweet.id
         except:
             pass
-
         await asyncio.sleep(60)
 @bot.command()
 async def hello(ctx):
